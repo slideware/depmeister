@@ -1,0 +1,17 @@
+# Depmeister configuration
+# See: https://github.com/slideware/depmeister
+
+max_age_days: 7 # Flag packages published less than X days ago (0 = disabled)
+min_scorecard: 2.0 # Minimum OpenSSF Scorecard score (0 = disabled)
+fail_on_vulns: true # Flag packages with known vulnerabilities
+skip_indirect: false # Skip indirect dependencies (go.mod // indirect)
+skip_dev_deps: false # Skip devDependencies (npm)
+concurrency: 10 # Max concurrent API requests
+
+
+# allowlist:
+#   - name: "some-internal-pkg"
+#     reason: "Internal package, not on deps.dev"
+#     vulns: true    # Suppress vulnerability warnings
+#     age: true      # Suppress age warnings
+#     score: true    # Suppress scorecard warnings
