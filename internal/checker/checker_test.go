@@ -114,6 +114,19 @@ func TestVulnerabilities(t *testing.T) {
 	if len(res.Flags) != 2 {
 		t.Fatalf("expected 2 flags (one per advisory), got %d", len(res.Flags))
 	}
+
+	seen := map[string]bool{}
+	for _, f := range res.Flags {
+		if f.AdvisoryID == "" {
+			t.Errorf("expected AdvisoryID to be set on vulnerability flag, got empty for %q", f.Reason)
+		}
+		seen[f.AdvisoryID] = true
+	}
+	for _, want := range []string{"GHSA-1234", "GHSA-5678"} {
+		if !seen[want] {
+			t.Errorf("expected flag with AdvisoryID %q, not found", want)
+		}
+	}
 }
 
 func TestLowScorecard(t *testing.T) {

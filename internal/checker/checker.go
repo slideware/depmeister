@@ -22,6 +22,9 @@ type VersionGetter interface {
 type Flag struct {
 	Dependency parser.Dependency
 	Reason     string
+	// AdvisoryID is the OSV advisory ID when the flag represents a vulnerability.
+	// Empty for non-vulnerability flags.
+	AdvisoryID string
 }
 
 // Result holds the outcome of a check run.
@@ -110,6 +113,7 @@ func checkDep(ctx context.Context, cfg config.Config, dep parser.Dependency, cli
 			flags = append(flags, Flag{
 				Dependency: dep,
 				Reason:     fmt.Sprintf("vulnerability: %s", adv.ID),
+				AdvisoryID: adv.ID,
 			})
 		}
 	}

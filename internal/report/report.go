@@ -21,12 +21,15 @@ type jsonReport struct {
 }
 
 type jsonIssue struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	System  string `json:"system"`
-	Source  string `json:"source"`
-	Reason  string `json:"reason"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	System      string `json:"system"`
+	Source      string `json:"source"`
+	Reason      string `json:"reason"`
+	AdvisoryURL string `json:"advisoryUrl,omitempty"`
 }
+
+const advisoryURLBase = "https://deps.dev/advisory/osv/"
 
 // Render writes the checker result to w in the given format ("text" or "json").
 // When isTTY is true and format is "text", ANSI color codes are used.
@@ -85,13 +88,17 @@ func renderJSON(w io.Writer, result *checker.Result) error {
 	}
 
 	for _, f := range result.Flags {
-		report.Issues = append(report.Issues, jsonIssue{
+		issue := jsonIssue{
 			Name:    f.Dependency.Name,
 			Version: f.Dependency.Version,
 			System:  string(f.Dependency.System),
 			Source:  f.Dependency.Source,
 			Reason:  f.Reason,
-		})
+		}
+		if f.AdvisoryID != "" {
+			issue.AdvisoryURL = advisoryURLBase + f.AdvisoryID
+		}
+		report.Issues = append(report.Issues, issue)
 	}
 
 	enc := json.NewEncoder(w)

@@ -102,6 +102,47 @@ func TestJSONOutput(t *testing.T) {
 	if report.Issues[0].Reason != "scorecard 3.2 (threshold: 7.0)" {
 		t.Errorf("unexpected reason: %q", report.Issues[0].Reason)
 	}
+	if report.Issues[0].AdvisoryURL != "" {
+		t.Errorf("expected empty advisoryUrl for non-vulnerability issue, got %q", report.Issues[0].AdvisoryURL)
+	}
+}
+
+func TestJSONOutputVulnerabilityAdvisoryURL(t *testing.T) {
+	var buf bytes.Buffer
+	result := &checker.Result{
+		Checked: 1,
+		Flags: []checker.Flag{
+			{
+				Dependency: parser.Dependency{
+					Name:    "bad-pkg",
+					Version: "1.0.0",
+					System:  parser.SystemNPM,
+				},
+				Reason:     "vulnerability: GHSA-vrw8-fxc6-2r93",
+				AdvisoryID: "GHSA-vrw8-fxc6-2r93",
+			},
+		},
+	}
+
+	if err := Render(&buf, result, "json", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report jsonReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw:\n%s", err, buf.String())
+	}
+
+	if len(report.Issues) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(report.Issues))
+	}
+	want := "https://deps.dev/advisory/osv/GHSA-vrw8-fxc6-2r93"
+	if report.Issues[0].AdvisoryURL != want {
+		t.Errorf("expected advisoryUrl %q, got %q", want, report.Issues[0].AdvisoryURL)
+	}
+	if !strings.Contains(buf.String(), "advisoryUrl") {
+		t.Errorf("expected raw JSON to contain advisoryUrl field, got:\n%s", buf.String())
+	}
 }
 
 func TestTextTTYColors(t *testing.T) {
