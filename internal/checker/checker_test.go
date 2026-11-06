@@ -265,3 +265,43 @@ func TestNoIssues(t *testing.T) {
 		t.Errorf("expected 0 flags, got %d: %+v", len(res.Flags), res.Flags)
 	}
 }
+
+func TestCheck_ReportsAllDependencies(t *testing.T) {
+	client := &mockClient{
+		versions: map[string]*depsdev.VersionResponse{
+			"GO/example.com/old/v1.0.0": {
+				PublishedAt: time.Now().Add(-365 * 24 * time.Hour),
+			},
+			"GO/example.com/new/v1.0.0": {
+				PublishedAt: time.Now().Add(-2 * 24 * time.Hour),
+			},
+		},
+		errors: map[string]error{
+			"GO/example.com/broken/v1.0.0": fmt.Errorf("boom"),
+		},
+	}
+
+	deps := []parser.Dependency{
+		{Name: "example.com/old", Version: "v1.0.0", System: parser.SystemGo},
+		{Name: "example.com/broken", Version: "v1.0.0", System: parser.SystemGo},
+		{Name: "example.com/new", Version: "v1.0.0", System: parser.SystemGo},
+	}
+
+	res, err := Check(context.Background(), baseCfg(), deps, client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(res.Dependencies) != len(deps) {
+		t.Fatalf("expected %d dependencies, got %d", len(deps), len(res.Dependencies))
+	}
+	wantChecked := []bool{true, false, true}
+	for i, d := range res.Dependencies {
+		if d.Dependency != deps[i] {
+			t.Errorf("dependency %d: expected %+v (input order), got %+v", i, deps[i], d.Dependency)
+		}
+		if d.Checked != wantChecked[i] {
+			t.Errorf("dependency %s: expected Checked=%v, got %v", d.Dependency.Name, wantChecked[i], d.Checked)
+		}
+	}
+}

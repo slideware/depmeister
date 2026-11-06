@@ -45,6 +45,70 @@ depmeister --verbose
 | `--format`    | `text`             | Output format: `text` or `json` |
 | `--verbose`   | `false`            | Enable debug logging            |
 
+### JSON output
+
+`--format json` produces a report with three top-level fields:
+
+- `checked` — number of dependencies successfully looked up on deps.dev
+- `issues` — one entry per flag raised (a dependency can appear more than once)
+- `dependencies` — every dependency found, in scan order, each with a `status` and its own list of issues
+
+```json
+{
+  "checked": 2,
+  "issues": [
+    {
+      "name": "golang.org/x/sys",
+      "version": "v0.42.0",
+      "system": "GO",
+      "source": "go.mod",
+      "reason": "vulnerability: GO-2026-5024",
+      "advisoryUrl": "https://deps.dev/advisory/osv/GO-2026-5024"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "system": "GO",
+      "source": "go.mod",
+      "status": "ok",
+      "issues": []
+    },
+    {
+      "name": "golang.org/x/sys",
+      "version": "v0.42.0",
+      "system": "GO",
+      "source": "go.mod",
+      "indirect": true,
+      "status": "flagged",
+      "issues": [
+        {
+          "reason": "vulnerability: GO-2026-5024",
+          "advisoryUrl": "https://deps.dev/advisory/osv/GO-2026-5024"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`status` is one of:
+
+| Status      | Meaning                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `ok`        | Checked, no issues found                                         |
+| `flagged`   | Checked, one or more issues found (listed in `issues`)           |
+| `unchecked` | The deps.dev lookup failed, so no checks were run for this entry |
+
+`advisoryUrl` is only present on vulnerability issues. `indirect` and `dev` are only present when `true`.
+
+For example, to list every dependency with its status:
+
+```sh
+depmeister --format json | jq -r '.dependencies[] | "\(.status)\t\(.name)@\(.version)"'
+```
+
 ## Configuration
 
 Create a `.depmeister.yaml` in your project root. All fields are optional, defaults are applied for anything not specified.

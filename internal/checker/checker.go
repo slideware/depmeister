@@ -27,10 +27,19 @@ type Flag struct {
 	AdvisoryID string
 }
 
+// DependencyStatus records whether a single dependency was successfully checked.
+type DependencyStatus struct {
+	Dependency parser.Dependency
+	// Checked is false when the version lookup failed and no checks were run.
+	Checked bool
+}
+
 // Result holds the outcome of a check run.
 type Result struct {
 	Checked int
 	Flags   []Flag
+	// Dependencies lists every input dependency, in input order.
+	Dependencies []DependencyStatus
 }
 
 // Check inspects all dependencies in parallel and returns flagged issues.
@@ -42,29 +51,34 @@ func Check(ctx context.Context, cfg config.Config, deps []parser.Dependency, cli
 		checked int
 	)
 
+	statuses := make([]DependencyStatus, len(deps))
+
 	sem := make(chan struct{}, max(cfg.Concurrency, 1))
 
-	for _, dep := range deps {
+	for i, dep := range deps {
 		wg.Add(1)
-		go func(dep parser.Dependency) {
+		go func(i int, dep parser.Dependency) {
 			defer wg.Done()
 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			f, ok := checkDep(ctx, cfg, dep, client)
+			// Each goroutine owns its own index, so no lock is needed here.
+			statuses[i] = DependencyStatus{Dependency: dep, Checked: ok}
+
 			mu.Lock()
 			defer mu.Unlock()
 			if ok {
 				checked++
 			}
 			flags = append(flags, f...)
-		}(dep)
+		}(i, dep)
 	}
 
 	wg.Wait()
 
-	return &Result{Checked: checked, Flags: flags}, nil
+	return &Result{Checked: checked, Flags: flags, Dependencies: statuses}, nil
 }
 
 // allowlistFor returns the AllowlistEntry for the given dependency name, if any.

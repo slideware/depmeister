@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/slideware/depmeister/internal/checker"
+	"github.com/slideware/depmeister/internal/parser"
 )
 
 const (
@@ -16,8 +17,32 @@ const (
 )
 
 type jsonReport struct {
-	Checked int         `json:"checked"`
-	Issues  []jsonIssue `json:"issues"`
+	Checked      int              `json:"checked"`
+	Issues       []jsonIssue      `json:"issues"`
+	Dependencies []jsonDependency `json:"dependencies"`
+}
+
+// Dependency statuses used in the JSON report.
+const (
+	statusOK        = "ok"
+	statusFlagged   = "flagged"
+	statusUnchecked = "unchecked"
+)
+
+type jsonDependency struct {
+	Name     string                `json:"name"`
+	Version  string                `json:"version"`
+	System   string                `json:"system"`
+	Source   string                `json:"source"`
+	Indirect bool                  `json:"indirect,omitempty"`
+	Dev      bool                  `json:"dev,omitempty"`
+	Status   string                `json:"status"`
+	Issues   []jsonDependencyIssue `json:"issues"`
+}
+
+type jsonDependencyIssue struct {
+	Reason      string `json:"reason"`
+	AdvisoryURL string `json:"advisoryUrl,omitempty"`
 }
 
 type jsonIssue struct {
@@ -83,10 +108,12 @@ func renderText(w io.Writer, result *checker.Result, isTTY bool) error {
 
 func renderJSON(w io.Writer, result *checker.Result) error {
 	report := jsonReport{
-		Checked: result.Checked,
-		Issues:  make([]jsonIssue, 0, len(result.Flags)),
+		Checked:      result.Checked,
+		Issues:       make([]jsonIssue, 0, len(result.Flags)),
+		Dependencies: make([]jsonDependency, 0, len(result.Dependencies)),
 	}
 
+	flagsByDep := make(map[parser.Dependency][]jsonDependencyIssue)
 	for _, f := range result.Flags {
 		issue := jsonIssue{
 			Name:    f.Dependency.Name,
@@ -99,6 +126,34 @@ func renderJSON(w io.Writer, result *checker.Result) error {
 			issue.AdvisoryURL = advisoryURLBase + f.AdvisoryID
 		}
 		report.Issues = append(report.Issues, issue)
+		flagsByDep[f.Dependency] = append(flagsByDep[f.Dependency], jsonDependencyIssue{
+			Reason:      issue.Reason,
+			AdvisoryURL: issue.AdvisoryURL,
+		})
+	}
+
+	for _, d := range result.Dependencies {
+		issues := flagsByDep[d.Dependency]
+		status := statusOK
+		switch {
+		case !d.Checked:
+			status = statusUnchecked
+		case len(issues) > 0:
+			status = statusFlagged
+		}
+		if issues == nil {
+			issues = []jsonDependencyIssue{}
+		}
+		report.Dependencies = append(report.Dependencies, jsonDependency{
+			Name:     d.Dependency.Name,
+			Version:  d.Dependency.Version,
+			System:   string(d.Dependency.System),
+			Source:   d.Dependency.Source,
+			Indirect: d.Dependency.Indirect,
+			Dev:      d.Dependency.Dev,
+			Status:   status,
+			Issues:   issues,
+		})
 	}
 
 	enc := json.NewEncoder(w)

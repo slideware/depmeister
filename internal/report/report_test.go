@@ -199,3 +199,58 @@ func TestTextNoTTYNoColors(t *testing.T) {
 		t.Errorf("expected no ANSI escape codes in non-TTY output, got:\n%s", out)
 	}
 }
+
+func TestJSONOutputDependencies(t *testing.T) {
+	clean := parser.Dependency{Name: "good-pkg", Version: "2.0.0", System: parser.SystemNPM, Source: "package-lock.json", Dev: true}
+	flagged := parser.Dependency{Name: "bad-pkg", Version: "1.0.0", System: parser.SystemNPM, Source: "package-lock.json"}
+	unchecked := parser.Dependency{Name: "gone-pkg", Version: "0.1.0", System: parser.SystemNPM, Source: "package-lock.json"}
+
+	var buf bytes.Buffer
+	result := &checker.Result{
+		Checked: 2,
+		Flags: []checker.Flag{
+			{Dependency: flagged, Reason: "vulnerability: GHSA-1234", AdvisoryID: "GHSA-1234"},
+			{Dependency: flagged, Reason: "published 3 days ago (threshold: 30)"},
+		},
+		Dependencies: []checker.DependencyStatus{
+			{Dependency: clean, Checked: true},
+			{Dependency: flagged, Checked: true},
+			{Dependency: unchecked, Checked: false},
+		},
+	}
+
+	if err := Render(&buf, result, "json", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report jsonReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw:\n%s", err, buf.String())
+	}
+
+	if len(report.Issues) != 2 {
+		t.Errorf("expected issues list to be unchanged with 2 entries, got %d", len(report.Issues))
+	}
+	if len(report.Dependencies) != 3 {
+		t.Fatalf("expected 3 dependencies, got %d", len(report.Dependencies))
+	}
+
+	got := report.Dependencies
+	if got[0].Name != "good-pkg" || got[0].Status != "ok" || len(got[0].Issues) != 0 || !got[0].Dev {
+		t.Errorf("unexpected clean dependency: %+v", got[0])
+	}
+	if got[1].Name != "bad-pkg" || got[1].Status != "flagged" || len(got[1].Issues) != 2 {
+		t.Fatalf("unexpected flagged dependency: %+v", got[1])
+	}
+	if got[1].Issues[0].AdvisoryURL != "https://deps.dev/advisory/osv/GHSA-1234" {
+		t.Errorf("expected advisoryUrl on vulnerability issue, got %q", got[1].Issues[0].AdvisoryURL)
+	}
+	if got[2].Name != "gone-pkg" || got[2].Status != "unchecked" {
+		t.Errorf("unexpected unchecked dependency: %+v", got[2])
+	}
+
+	// Clean dependencies should serialize an empty array rather than null.
+	if !strings.Contains(buf.String(), `"issues": []`) {
+		t.Errorf("expected empty issues array for clean dependency, got:\n%s", buf.String())
+	}
+}
