@@ -101,7 +101,7 @@ depmeister --verbose
 | `flagged`   | Checked, one or more issues found (listed in `issues`)           |
 | `unchecked` | The deps.dev lookup failed, so no checks were run for this entry |
 
-`advisoryUrl` is only present on vulnerability issues. `indirect` and `dev` are only present when `true`.
+`advisoryUrl` is only present on vulnerability issues. `indirect` and `dev` are only present when `true`; see [Indirect dependencies](#indirect-dependencies) for how `indirect` is determined.
 
 For example, to list every dependency with its status:
 
@@ -117,7 +117,7 @@ Create a `.depmeister.yaml` in your project root. All fields are optional, defau
 max_age_days: 7 # Flag packages published less than X days ago (0 = disabled)
 min_scorecard: 2.0 # Minimum OpenSSF Scorecard score (0 = disabled)
 fail_on_vulns: true # Flag packages with known vulnerabilities
-skip_indirect: true # Skip indirect dependencies (go.mod // indirect)
+skip_indirect: true # Skip indirect dependencies (see "Indirect dependencies" below)
 skip_dev_deps: false # Skip devDependencies (npm)
 concurrency: 10 # Max concurrent API requests
 
@@ -145,6 +145,24 @@ All config values can be overridden with environment variables using the `DEPMEI
 | `DEPMEISTER_FORMAT`        | `json`             |
 | `DEPMEISTER_RECURSIVE`     | `true`             |
 | `DEPMEISTER_VERBOSE`       | `true`             |
+
+### Indirect dependencies
+
+A dependency is _indirect_ when the project uses it only through another dependency. `skip_indirect` (default `true`) leaves these out of the scan, and the JSON report marks them with `"indirect": true`.
+
+How indirect dependencies are identified depends on the source file:
+
+- **`go.mod`**: marked `// indirect`.
+- **`package-lock.json` (lockfileVersion 2/3)**: not declared in the root package's `dependencies`, `devDependencies`, `optionalDependencies` or `peerDependencies` as recorded in the lockfile, nor in those of the workspace package it is installed for.
+- **`package-lock.json` (lockfileVersion 1)**: not declared in those same four fields of the `package.json` next to the lockfile.
+- **`package.json` without a lockfile**: never, since only declared dependencies are listed.
+- **`requirements.txt`, `Cargo.lock`**: never, since these files do not distinguish direct from indirect.
+
+For npm, a package hoisted to the top-level `node_modules` is still indirect unless it is declared. A dependency declared by a workspace package counts as direct, whether it is installed in the workspace's own `node_modules` or hoisted to the root. Packages nested inside another package's `node_modules` are not scanned. Workspace packages and links to them are the project's own packages and are not reported.
+
+Lockfile v1 does not record which dependencies were declared. If there is no `package.json` next to a v1 lockfile, every package in it is reported as direct (a debug message is logged).
+
+> **Behavior change in v0.3.0:** earlier versions never marked npm dependencies as indirect, so every package in `package-lock.json` was checked. Since `skip_indirect` defaults to `true`, the default configuration now checks only the dependencies declared in `package.json` and skips transitive npm packages. Set `skip_indirect: false` (or `DEPMEISTER_SKIP_INDIRECT=false`) to keep checking every package in the lockfile.
 
 ### Priority order
 

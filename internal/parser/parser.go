@@ -21,7 +21,7 @@ type Dependency struct {
 	Version  string
 	System   System
 	Source   string // file path where this dependency was found
-	Indirect bool   // go.mod // indirect
+	Indirect bool   // go.mod // indirect, or npm package not declared in package.json
 	Dev      bool   // npm devDependencies
 }
 

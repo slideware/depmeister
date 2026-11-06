@@ -254,3 +254,33 @@ func TestJSONOutputDependencies(t *testing.T) {
 		t.Errorf("expected empty issues array for clean dependency, got:\n%s", buf.String())
 	}
 }
+
+func TestJSONOutputIndirectNPM(t *testing.T) {
+	transitive := parser.Dependency{Name: "ms", Version: "2.1.3", System: parser.SystemNPM, Source: "package-lock.json", Indirect: true}
+
+	var buf bytes.Buffer
+	result := &checker.Result{
+		Checked:      1,
+		Dependencies: []checker.DependencyStatus{{Dependency: transitive, Checked: true}},
+	}
+
+	if err := Render(&buf, result, "json", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report jsonReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw:\n%s", err, buf.String())
+	}
+
+	if len(report.Dependencies) != 1 {
+		t.Fatalf("expected 1 dependency, got %d", len(report.Dependencies))
+	}
+	got := report.Dependencies[0]
+	if got.System != "NPM" || !got.Indirect {
+		t.Errorf("expected indirect NPM dependency, got %+v", got)
+	}
+	if !strings.Contains(buf.String(), `"indirect": true`) {
+		t.Errorf("expected raw JSON to contain \"indirect\": true, got:\n%s", buf.String())
+	}
+}
